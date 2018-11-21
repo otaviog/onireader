@@ -1,0 +1,12 @@
+venv
+.envrc
+__pycache__
+CMakeFiles
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+build
+
+*.egg-info
+*.so
+Makefile
