@@ -1,10 +1,12 @@
-#include <iostream>
 #include <memory>
 
 #include <OpenNI.h>
 
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
+
+#include <iostream>
+using namespace std;
 
 namespace py = pybind11;
 
@@ -75,35 +77,56 @@ public:
     _device.open(str.c_str());
     _device.setImageRegistrationMode(
         openni::ImageRegistrationMode::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
+
+    _playback_ctrl = _device.getPlaybackControl();
+
     _depth_stream.create(_device, openni::SENSOR_DEPTH);
     _depth_stream.start();
 
     _rgb_stream.create(_device, openni::SENSOR_COLOR);
     _rgb_stream.start();
-    
-    int max_depth = _device.getPlaybackControl()->getNumberOfFrames(_depth_stream);
+
+    int max_depth =
+        _device.getPlaybackControl()->getNumberOfFrames(_depth_stream);
     int max_rgb = _device.getPlaybackControl()->getNumberOfFrames(_rgb_stream);
 
-    _frame_count = std::min(max_depth, max_rgb);
+    _frame_count = std::max(max_depth, max_rgb);
   }
 
-  py::array_t<uint16_t> readDepth() {
+  py::tuple readDepth() {
     openni::VideoFrameRef frame_ref;
+
     _depth_stream.readFrame(&frame_ref);
-    return convert_depth_image_to_array(&frame_ref);
+    return py::make_tuple(convert_depth_image_to_array(&frame_ref),
+                          frame_ref.getTimestamp(), frame_ref.getFrameIndex());
   }
 
-  py::array_t<uint8_t> readColor() {
+  py::tuple readColor() {
     openni::VideoFrameRef frame_ref;
     _rgb_stream.readFrame(&frame_ref);
-    return convert_rgb_image_to_array(&frame_ref);
+
+    return py::make_tuple(convert_rgb_image_to_array(&frame_ref),
+                          frame_ref.getTimestamp(), frame_ref.getFrameIndex());
   }
 
-  int get_count() const {
-    return _frame_count;
+  bool seek(int frame_id) {
+    openni::Status rc = _playback_ctrl->seek(_rgb_stream, frame_id);
+
+    if (rc != openni::STATUS_OK) {
+      return false;
+    }
+
+    rc = _playback_ctrl->seek(_rgb_stream, frame_id);
+    if (rc != openni::STATUS_OK) {
+      return false;
+    }
+    return true;
   }
+
+  int get_count() const { return _frame_count; }
 
 private:
+  openni::PlaybackControl *_playback_ctrl;
   openni::Device _device;
   openni::VideoStream _depth_stream, _rgb_stream;
   int _frame_count;
@@ -117,6 +140,6 @@ PYBIND11_MODULE(_onireader, m) {
       .def("open", &Device::open)
       .def("readDepth", &Device::readDepth)
       .def("readColor", &Device::readColor)
+      .def("seek", &Device::seek)
       .def("__len__", &Device::get_count);
-  
 }
