@@ -79,6 +79,7 @@ public:
         openni::ImageRegistrationMode::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
 
     _playback_ctrl = _device.getPlaybackControl();
+    _playback_ctrl->setSpeed(-1);
 
     _depth_stream.create(_device, openni::SENSOR_DEPTH);
     _depth_stream.start();
@@ -87,7 +88,7 @@ public:
     _rgb_stream.start();
 
     int max_depth =
-        _device.getPlaybackControl()->getNumberOfFrames(_depth_stream);
+        _playback_ctrl->getNumberOfFrames(_depth_stream);
     int max_rgb = _device.getPlaybackControl()->getNumberOfFrames(_rgb_stream);
 
     _frame_count = std::max(max_depth, max_rgb);

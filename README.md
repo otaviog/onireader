@@ -19,7 +19,7 @@ Requirements:
 Installing openni2-dev on **Ubuntu**:
 
 ```shell
-$ sudo apt install libopenni2-dev libusb-1.0-0-dev
+$ sudo apt install cmake libopenni2-dev libusb-1.0-0-dev
 ```
 
 Install onireader using pip:
