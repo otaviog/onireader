@@ -5,7 +5,6 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 
-#include <iostream>
 using namespace std;
 
 namespace py = pybind11;
@@ -13,45 +12,33 @@ namespace py = pybind11;
 static bool g_openni_init = false;
 
 namespace {
-py::array_t<uint8_t>
-convert_rgb_image_to_array(openni::VideoFrameRef *frame_ref) {
 
-  std::vector<size_t> shape;
-  std::vector<size_t> stride;
+template <typename img_type>
+py::array_t<img_type> convert_image_to_array(openni::VideoFrameRef *frame_ref,
+                                             bool is_rgb) {
+  vector<size_t> shape;
+  vector<size_t> stride;
 
   const size_t width = frame_ref->getWidth();
   const size_t height = frame_ref->getHeight();
-  shape = {height, width, 3};
-  stride = {width * 3, 3, 1};
 
-  auto format = py::format_descriptor<uint8_t>::format();
+  if (is_rgb) {
+    shape = {height, width, 3};
+    stride = {width * 3, 3, 1};
+  } else {
+    shape = {height, width};
+    stride = {width * 2, 2};
+  }
+
   size_t data_size = frame_ref->getDataSize();
 
   uint8_t *data = new uint8_t[data_size];
   memcpy(data, frame_ref->getData(), data_size);
-  return py::array_t<uint8_t>(py::buffer_info(data, sizeof(uint8_t), format,
-                                              shape.size(), shape, stride));
-}
 
-py::array_t<uint16_t>
-convert_depth_image_to_array(openni::VideoFrameRef *frame_ref) {
+  py::capsule free_data(data, [](void *data) { delete[](uint8_t *) data; });
 
-  std::vector<size_t> shape;
-  std::vector<size_t> stride;
-
-  const size_t width = frame_ref->getWidth();
-  const size_t height = frame_ref->getHeight();
-
-  shape = {height, width};
-  stride = {width * 2, 2};
-
-  auto format = py::format_descriptor<int16_t>::format();
-  size_t data_size = frame_ref->getDataSize();
-
-  uint16_t *data = reinterpret_cast<uint16_t *>(new uint8_t[data_size]);
-  memcpy(data, frame_ref->getData(), data_size);
-  return py::array_t<uint16_t>(py::buffer_info(data, sizeof(uint16_t), format,
-                                               shape.size(), shape, stride));
+  return py::array_t<img_type>(shape, stride,
+                               reinterpret_cast<img_type *>(data), free_data);
 }
 
 } // namespace
@@ -73,7 +60,7 @@ public:
     _device.close();
   }
 
-  bool open(const std::string &str) {
+  bool open(const string &str) {
     _device.open(str.c_str());
     _device.setImageRegistrationMode(
         openni::ImageRegistrationMode::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
@@ -87,18 +74,17 @@ public:
     _rgb_stream.create(_device, openni::SENSOR_COLOR);
     _rgb_stream.start();
 
-    int max_depth =
-        _playback_ctrl->getNumberOfFrames(_depth_stream);
+    int max_depth = _playback_ctrl->getNumberOfFrames(_depth_stream);
     int max_rgb = _device.getPlaybackControl()->getNumberOfFrames(_rgb_stream);
 
-    _frame_count = std::max(max_depth, max_rgb);
+    _frame_count = max(max_depth, max_rgb);
   }
 
   py::tuple readDepth() {
     openni::VideoFrameRef frame_ref;
 
     _depth_stream.readFrame(&frame_ref);
-    return py::make_tuple(convert_depth_image_to_array(&frame_ref),
+    return py::make_tuple(convert_image_to_array<uint16_t>(&frame_ref, false),
                           frame_ref.getTimestamp(), frame_ref.getFrameIndex());
   }
 
@@ -106,7 +92,7 @@ public:
     openni::VideoFrameRef frame_ref;
     _rgb_stream.readFrame(&frame_ref);
 
-    return py::make_tuple(convert_rgb_image_to_array(&frame_ref),
+    return py::make_tuple(convert_image_to_array<uint8_t>(&frame_ref, true),
                           frame_ref.getTimestamp(), frame_ref.getFrameIndex());
   }
 
