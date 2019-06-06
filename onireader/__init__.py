@@ -1,1 +1,1 @@
-from _onireader import Device
+from onireader._onireader import Device

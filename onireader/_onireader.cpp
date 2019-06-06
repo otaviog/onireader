@@ -62,6 +62,7 @@ public:
 
   bool open(const string &str) {
     _device.open(str.c_str());
+    
     _device.setImageRegistrationMode(
         openni::ImageRegistrationMode::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
 
