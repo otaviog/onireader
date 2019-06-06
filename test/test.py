@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """Simple testing. Download the 030.oni file from
 https://github.com/scenenn/scenenn to execute.
 """

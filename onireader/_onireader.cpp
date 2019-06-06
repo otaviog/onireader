@@ -54,37 +54,53 @@ public:
     _frame_count = 0;
   }
 
-  ~Device() {
+  ~Device() { close(); }
+
+  bool open(const string &uri) {
+    if (uri.empty()) {
+      _device.open(openni::ANY_DEVICE);
+    } else {
+      _device.open(uri.c_str());
+    }
+
+    _playback_ctrl = _device.getPlaybackControl();
+    if (_playback_ctrl)
+      _playback_ctrl->setSpeed(-1);
+
+    _depth_stream.create(_device, openni::SENSOR_DEPTH);
+
+    _rgb_stream.create(_device, openni::SENSOR_COLOR);
+
+    _device.setImageRegistrationMode(
+        openni::ImageRegistrationMode::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
+
+    _depth_stream.start();
+    _rgb_stream.start();
+    if (_playback_ctrl) {
+      int max_depth = _playback_ctrl->getNumberOfFrames(_depth_stream);
+      int max_rgb =
+          _device.getPlaybackControl()->getNumberOfFrames(_rgb_stream);
+
+      _frame_count = max(max_depth, max_rgb);
+    } else {
+      _frame_count = -1;
+    }
+  }
+
+  void close() {
     _depth_stream.stop();
     _rgb_stream.stop();
     _device.close();
   }
 
-  bool open(const string &str) {
-    _device.open(str.c_str());
-    
-    _device.setImageRegistrationMode(
-        openni::ImageRegistrationMode::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
-
-    _playback_ctrl = _device.getPlaybackControl();
-    _playback_ctrl->setSpeed(-1);
-
-    _depth_stream.create(_device, openni::SENSOR_DEPTH);
-    _depth_stream.start();
-
-    _rgb_stream.create(_device, openni::SENSOR_COLOR);
-    _rgb_stream.start();
-
-    int max_depth = _playback_ctrl->getNumberOfFrames(_depth_stream);
-    int max_rgb = _device.getPlaybackControl()->getNumberOfFrames(_rgb_stream);
-
-    _frame_count = max(max_depth, max_rgb);
-  }
-
   py::tuple readDepth() {
     openni::VideoFrameRef frame_ref;
-
     _depth_stream.readFrame(&frame_ref);
+
+    if (!frame_ref.isValid()) {
+      return py::make_tuple(nullptr, -1, -1);
+    }
+
     return py::make_tuple(convert_image_to_array<uint16_t>(&frame_ref, false),
                           frame_ref.getTimestamp(), frame_ref.getFrameIndex());
   }
@@ -93,6 +109,9 @@ public:
     openni::VideoFrameRef frame_ref;
     _rgb_stream.readFrame(&frame_ref);
 
+    if (!frame_ref.isValid()) {
+      return py::make_tuple(nullptr, -1, -1);
+    }
     return py::make_tuple(convert_image_to_array<uint8_t>(&frame_ref, true),
                           frame_ref.getTimestamp(), frame_ref.getFrameIndex());
   }
@@ -123,6 +142,7 @@ private:
 PYBIND11_MODULE(_onireader, m) {
   m.doc() = ".oni reader module";
 
+  m.attr("ANY_DEVICE") = py::str("");
   py::class_<Device>(m, "Device")
       .def(py::init<>())
       .def("open", &Device::open)
