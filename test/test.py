@@ -18,6 +18,7 @@ def _main():
 
     dev = oni.Device()
     dev.open('030.oni')
+    dev.start()
     # plt.ion()
     for i in range(len(dev)):
         depth_img, depth_ts, depth_idx = dev.readDepth()

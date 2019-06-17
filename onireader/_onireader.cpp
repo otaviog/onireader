@@ -43,6 +43,13 @@ py::array_t<img_type> convert_image_to_array(openni::VideoFrameRef *frame_ref,
 
 } // namespace
 
+class SensorInfo {
+public:
+  SensorInfo(int width = -1, int height = -1, float fps = 0.0f)
+      : width(width), height(height), fps(fps) {}
+  int width, height;
+  float fps;
+};
 class Device {
 public:
   Device() {
@@ -58,28 +65,74 @@ public:
 
   bool open(const string &uri) {
     if (uri.empty()) {
-      _device.open(openni::ANY_DEVICE);
+      if (device_.open(openni::ANY_DEVICE) != openni::Status::STATUS_OK)
+        return false;
+
     } else {
-      _device.open(uri.c_str());
+      if (device_.open(uri.c_str()) != openni::Status::STATUS_OK)
+        return false;
     }
 
-    _playback_ctrl = _device.getPlaybackControl();
-    if (_playback_ctrl)
-      _playback_ctrl->setSpeed(-1);
+    return true;
+  }
 
-    _depth_stream.create(_device, openni::SENSOR_DEPTH);
+  py::list get_sensor_infos(openni::SensorType sensor) {
+    const openni::SensorInfo *info = device_.getSensorInfo(sensor);
+    const openni::Array<openni::VideoMode> &modes =
+        info->getSupportedVideoModes();
+    py::list result;
+    for (int i = 0; i < modes.getSize(); i++) {
+      const auto mode = modes[i];
+      result.append(SensorInfo(mode.getResolutionX(), mode.getResolutionY(),
+                               mode.getFps()));
+    }
 
-    _rgb_stream.create(_device, openni::SENSOR_COLOR);
+    return result;
+  }
 
-    _device.setImageRegistrationMode(
+  py::list get_depth_sensor_infos() {
+    return get_sensor_infos(openni::SENSOR_DEPTH);
+  }
+
+  py::list get_rgb_sensor_infos() {
+    return get_sensor_infos(openni::SENSOR_COLOR);
+  }
+
+  void start(int depth_mode, int rgb_mode) {
+    playback_ctrl_ = device_.getPlaybackControl();
+    if (playback_ctrl_)
+      playback_ctrl_->setSpeed(-1);
+
+    depth_stream_.create(device_, openni::SENSOR_DEPTH);
+    rgb_stream_.create(device_, openni::SENSOR_COLOR);
+
+    device_.setImageRegistrationMode(
         openni::ImageRegistrationMode::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
 
-    _depth_stream.start();
-    _rgb_stream.start();
-    if (_playback_ctrl) {
-      int max_depth = _playback_ctrl->getNumberOfFrames(_depth_stream);
+    if (depth_mode >= 0) {
+      const openni::SensorInfo *info =
+          device_.getSensorInfo(openni::SENSOR_DEPTH);
+      const openni::Array<openni::VideoMode> &modes =
+          info->getSupportedVideoModes();
+
+      depth_stream_.setVideoMode(modes[depth_mode]);
+    }
+
+    depth_stream_.start();
+
+    if (rgb_mode >= 0) {
+      const openni::SensorInfo *info =
+          device_.getSensorInfo(openni::SENSOR_COLOR);
+      const openni::Array<openni::VideoMode> &modes =
+          info->getSupportedVideoModes();
+      rgb_stream_.setVideoMode(modes[rgb_mode]);
+    }
+
+    rgb_stream_.start();
+    if (playback_ctrl_) {
+      int max_depth = playback_ctrl_->getNumberOfFrames(depth_stream_);
       int max_rgb =
-          _device.getPlaybackControl()->getNumberOfFrames(_rgb_stream);
+          device_.getPlaybackControl()->getNumberOfFrames(rgb_stream_);
 
       _frame_count = max(max_depth, max_rgb);
     } else {
@@ -88,14 +141,14 @@ public:
   }
 
   void close() {
-    _depth_stream.stop();
-    _rgb_stream.stop();
-    _device.close();
+    depth_stream_.stop();
+    rgb_stream_.stop();
+    device_.close();
   }
 
   py::tuple readDepth() {
     openni::VideoFrameRef frame_ref;
-    _depth_stream.readFrame(&frame_ref);
+    depth_stream_.readFrame(&frame_ref);
 
     if (!frame_ref.isValid()) {
       return py::make_tuple(nullptr, -1, -1);
@@ -107,7 +160,7 @@ public:
 
   py::tuple readColor() {
     openni::VideoFrameRef frame_ref;
-    _rgb_stream.readFrame(&frame_ref);
+    rgb_stream_.readFrame(&frame_ref);
 
     if (!frame_ref.isValid()) {
       return py::make_tuple(nullptr, -1, -1);
@@ -117,13 +170,13 @@ public:
   }
 
   bool seek(int frame_id) {
-    openni::Status rc = _playback_ctrl->seek(_rgb_stream, frame_id);
+    openni::Status rc = playback_ctrl_->seek(rgb_stream_, frame_id);
 
     if (rc != openni::STATUS_OK) {
       return false;
     }
 
-    rc = _playback_ctrl->seek(_rgb_stream, frame_id);
+    rc = playback_ctrl_->seek(rgb_stream_, frame_id);
     if (rc != openni::STATUS_OK) {
       return false;
     }
@@ -133,9 +186,9 @@ public:
   int get_count() const { return _frame_count; }
 
 private:
-  openni::PlaybackControl *_playback_ctrl;
-  openni::Device _device;
-  openni::VideoStream _depth_stream, _rgb_stream;
+  openni::PlaybackControl *playback_ctrl_;
+  openni::Device device_;
+  openni::VideoStream depth_stream_, rgb_stream_;
   int _frame_count;
 };
 
@@ -143,9 +196,17 @@ PYBIND11_MODULE(_onireader, m) {
   m.doc() = ".oni reader module";
 
   m.attr("ANY_DEVICE") = py::str("");
+  py::class_<SensorInfo>(m, "SensorInfo")
+      .def_readonly("width", &SensorInfo::width)
+      .def_readonly("height", &SensorInfo::height)
+      .def_readonly("fps", &SensorInfo::fps);
+
   py::class_<Device>(m, "Device")
       .def(py::init<>())
       .def("open", &Device::open)
+      .def("start", &Device::start)
+      .def("get_depth_sensor_infos", &Device::get_depth_sensor_infos)
+      .def("get_rgb_sensor_infos", &Device::get_rgb_sensor_infos)
       .def("readDepth", &Device::readDepth)
       .def("readColor", &Device::readColor)
       .def("seek", &Device::seek)
