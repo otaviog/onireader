@@ -3,10 +3,10 @@ import re
 import sys
 import platform
 import subprocess
+from distutils.version import LooseVersion
 
 from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
-from distutils.version import LooseVersion
 
 
 def _forbid_publish():
@@ -50,10 +50,7 @@ class CMakeBuild(build_ext):
         extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
         print(extdir)
         cmake_args = ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + extdir,
-                      '-DPYTHON_EXECUTABLE=' + sys.executable,
-                      '-DBUILD_PYTHON_BINDINGS=ON',
-                      '-DBUILD_TESTS=OFF',
-                      '-DBUILD_APPLICATIONS=OFF']
+                      '-DPYTHON_EXECUTABLE=' + sys.executable]
 
         cfg = 'Debug' if self.debug else 'Release'
         build_args = ['--config', cfg]
@@ -87,7 +84,6 @@ setup(
     zip_safe=False,
     description="OpenNI2's ONI Reader",
     packages=find_packages(),
-    # package_dir={'' : '.'},
     install_requires=requirements,
     extras_require={
         'dev': ['Sphinx',
@@ -101,6 +97,9 @@ setup(
                 'matplotlib']
         },
     long_description='',
+    ext_package='onireader',
     ext_modules=[CMakeExtension('_onireader')],
-    cmdclass=dict(build_ext=CMakeBuild)
+    cmdclass=dict(build_ext=CMakeBuild),
+    include_package_data=True,
+    package_data={'onireader': ['*.so']},
 )
