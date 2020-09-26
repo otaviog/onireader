@@ -11,6 +11,10 @@ include_directories(${OPENNI2_INCLUDE_DIRS})
 
 add_subdirectory(pybind11)
 
+if (SKBUILD)
+  find_package(PythonExtensions REQUIRED)
+endif(SKBUILD)
+
 set(CMAKE_CXX_FLAGS -fPIC)
 add_subdirectory(onireader)
 

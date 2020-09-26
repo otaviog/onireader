@@ -15,6 +15,7 @@ Requirements:
 
 * Linux environment
 * OpenNI2 C++ library
+* [scikit-build](https://scikit-build.readthedocs.io/en/latest)
 
 Installing openni2-dev on **Ubuntu**:
 
@@ -25,5 +26,6 @@ $ sudo apt install cmake libopenni2-dev libusb-1.0-0-dev
 Install onireader using pip:
 
 ```shell
+$ pip install scikit-build
 $ pip install pip install git+https://github.com/otaviog/onireader.git
 ```
